@@ -1,0 +1,13 @@
+$TTL 86400
+@ IN SOA ns.cardeal.local. admin.cardeal.local. (
+ 2026111605
+ 3600
+ 1800
+ 604800
+ 86400
+)
+@ IN NS ns.cardeal.local.
+ns IN A 192.168.10.2
+www IN A 192.168.10.2
+mail IN A 192.168.10.3
+@ IN MX 10 mail.cardeal.local.

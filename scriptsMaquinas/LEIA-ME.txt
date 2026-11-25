@@ -1,0 +1,19 @@
+COMPLEMENTOS — PROJETO CARDEAL LTDA.
+
+Conteúdo:
+- scripts/: scripts Netplan de referência para VM1, VM2 e VM3.
+- wireshark/analise-capturas.txt: análise textual dos testes realizados.
+
+ATENÇÃO AOS SCRIPTS:
+1. Eles alteram /etc/netplan/00-installer-config.yaml.
+2. Antes de substituir o arquivo, salvam uma cópia de segurança.
+3. Confira as interfaces enp0s3/enp0s8 e a configuração do VirtualBox.
+4. Execute somente dentro da VM correspondente, com sudo.
+5. Não execute em uma VM já configurada e funcionando sem necessidade.
+6. Os scripts configuram apenas interfaces e endereços de rede. Não
+   configuram DHCP, BIND9, Apache, Postfix, Dovecot, Samba ou nftables.
+7. coloquei a titulo de informação, mas, talvez, ´precise de mais do que isso para rodar em outra máquina. 
+
+ATENÇÃO À ANÁLISE:
+Os dados foram organizados com base nos resultados registrados durante
+a implementação. 

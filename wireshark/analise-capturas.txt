@@ -1,0 +1,180 @@
+ANÁLISE DAS CAPTURAS WIRESHARK — CARDEAL LTDA.
+================================================
+
+Rede interna: 192.168.10.0/24
+VM1 — Gateway/DHCP: 192.168.10.1
+VM2 — DNS/Web:      192.168.10.2
+VM3 — E-mail/Samba: 192.168.10.3
+Domínio: cardeal.local
+
+Nota metodológica:  Esta análise foi revisada com base nas cinco imagens do Wireshark
+fornecidas. Os números de frames abaixo correspondem às imagens
+apresentadas e podem mudar se outro arquivo PCAP for aberto ou filtrado.
+
+1. DHCP — distribuição automática
+-----------------------------------
+Servidor DHCP: VM1 (192.168.10.1)
+Cliente observado: VM3 (192.168.10.53, durante teste temporário DHCP)
+Portas: UDP 68 (cliente) e UDP 67 (servidor)
+
+Pacotes visíveis na imagem DHCP:
+Frame 1: 0.0.0.0 -> 255.255.255.255 Discover
+Frame 2: 0.0.0.0 -> 255.255.255.255 Discover
+Frame 3: 192.168.10.1 -> 192.168.10.53 Offer
+Frame 4: 0.0.0.0 -> 255.255.255.255 Discover
+Frame 5: 192.168.10.1 -> 192.168.10.53 Offer
+Frame 6: 0.0.0.0 -> 255.255.255.255 Request
+Frame 7: 192.168.10.1 -> 192.168.10.53 ACK
+
+Interpretação:
+A captura mostra mais de uma mensagem Discover/Offer. A sequência
+completa da segunda tentativa é Discover (frame 4), Offer (frame 5),
+Request (frame 6) e ACK (frame 7). O servidor VM1 ofereceu e confirmou
+o endereço 192.168.10.53. A VM3 voltou posteriormente ao IP estático
+192.168.10.3.
+
+2. DNS — resolução de nomes
+----------------------------
+Cliente: 192.168.10.3 (VM3)
+Servidor DNS: 192.168.10.2 (VM2)
+
+Pacotes visíveis na imagem DNS:
+Frame 25: 192.168.10.3 -> 192.168.10.2
+          Consulta A para www.cardeal.local
+Frame 26: 192.168.10.2 -> 192.168.10.3
+          Resposta A: www.cardeal.local = 192.168.10.2
+Frame 27: 192.168.10.3 -> 192.168.10.2
+          Consulta AAAA para www.cardeal.local
+Frame 28: 192.168.10.2 -> 192.168.10.3
+          Resposta AAAA sem endereço IPv6; aparece informação SOA.
+
+Interpretação:
+A VM3 consultou o servidor DNS BIND9 da VM2. O nome
+www.cardeal.local foi resolvido para 192.168.10.2. Também ocorreu uma
+consulta AAAA, referente a IPv6, mas não foi retornado endereço IPv6
+para esse nome. O registro mail.cardeal.local está configurado para
+192.168.10.3 e foi testado separadamente com nslookup.
+
+3. HTTP — acesso à página Web
+------------------------------
+Cliente: 192.168.10.3 (VM3)
+Servidor Web: 192.168.10.2 (VM2)
+Porta do servidor: TCP 80
+Host: www.cardeal.local
+URL: http://www.cardeal.local/
+
+Pacotes visíveis na imagem HTTP:
+Frame 4: 192.168.10.3 -> 192.168.10.2
+         GET / HTTP/1.1
+Frame 6: 192.168.10.2 -> 192.168.10.3
+         HTTP/1.1 200 OK (text/html)
+
+Interpretação:
+A VM3 solicitou a página inicial hospedada no Apache2 da VM2 e recebeu
+a resposta HTTP 200 OK. A imagem fornecida comprova a requisição GET e
+a resposta 200 OK. Ela não mostra, por si só, o handshake TCP completo
+(SYN, SYN-ACK e ACK). Para documentar o handshake, é necessário conferir
+a captura original usando o filtro tcp.port == 80.
+
+4. SMTP — envio de e-mail
+--------------------------
+Cliente que iniciou a conexão: 192.168.10.1 (VM1)
+Servidor de e-mail: 192.168.10.3 (VM3)
+Porta: TCP 25
+Remetente: teste@cardeal.local
+Destinatário: larissa@cardeal.local
+
+Sequência bem-sucedida visível na imagem:
+Frame 28: VM3 -> VM1: saudação 220 mail.cardeal.local ESMTP Postfix
+Frame 30: VM1 -> VM3: EHLO vm1gateway
+Frame 32: VM3 -> VM1: resposta 250
+Frame 33: VM1 -> VM3: MAIL FROM:<teste@cardeal.local>
+Frame 35: VM3 -> VM1: 250 2.1.0 Ok
+Frame 36: VM1 -> VM3: RCPT TO:<larissa@cardeal.local>
+Frame 38: VM3 -> VM1: 250 2.1.5 Ok
+Frame 39: VM1 -> VM3: DATA
+Frame 41: VM3 -> VM1: 354 End data
+Frame 42: VM1 -> VM3: conteúdo da mensagem
+Frame 43: VM3 -> VM1: 250 2.0.0 Ok: queued as E473563CBA
+Frame 44: VM1 -> VM3: QUIT
+Frame 45: VM3 -> VM1: 221 2.0.0 Bye
+
+Interpretação:
+A VM1 iniciou a conexão TCP com o Postfix da VM3. Após a saudação
+220 enviada pelo servidor, o cliente enviou EHLO, identificou remetente
+e destinatário e transmitiu o conteúdo da mensagem. O Postfix aceitou
+a mensagem para processamento/entrega, conforme a resposta 250 no
+frame 43. A imagem emailSMTP.png também mostra tentativas anteriores
+com erro 500 5.5.2 bad syntax; a sequência bem-sucedida ocorre depois,
+nos frames 28 a 45 da captura filtrada apresentada.
+
+5. IMAP — acesso à caixa de entrada
+------------------------------------
+Servidor IMAP: VM3 (Dovecot)
+Porta testada: TCP 143
+
+Comprovações realizadas no terminal da VM3:
+- doveadm auth test larissa: autenticação bem-sucedida.
+- doveadm mailbox status -u larissa messages INBOX:
+  INBOX messages=3.
+
+Interpretação:
+Após corrigir mail_driver, mail_path e mail_inbox_path, o Dovecot
+passou a reconhecer três mensagens na INBOX. Essa comprovação foi
+realizada por comandos no servidor. As imagens de Wireshark fornecidas
+nesta revisão não mostram uma sessão IMAP; a captura de e-mail exibida
+documenta SMTP pela porta 25.
+
+6. SMB/Samba — compartilhamento de arquivos
+---------------------------------------------
+Servidor Samba: VM3 (192.168.10.3)
+Compartilhamento: Arquivos
+Arquivo de teste: teste.txt
+
+Teste realizado na VM1:
+smbclient //192.168.10.3/Arquivos -N
+
+Dentro do compartilhamento, o comando ls mostrou teste.txt.
+
+Interpretação:
+A VM1 acessou o compartilhamento disponibilizado pelo Samba na VM3
+e listou o arquivo teste.txt. Esta comprovação foi feita pelo terminal,
+não pelas imagens de Wireshark fornecidas nesta revisão.
+
+7. Gateway — conectividade externa pela VM1
+--------------------------------------------
+Gateway: VM1 (192.168.10.1)
+Cliente: VM3 (192.168.10.3)
+Interface interna da VM3: enp0s8
+
+Durante o teste, o adaptador NAT próprio da VM3 foi temporariamente
+desativado no VirtualBox. Foi adicionada a rota temporária:
+ip route add default via 192.168.10.1 dev enp0s8
+
+A tabela de rotas mostrou:
+default via 192.168.10.1 dev enp0s8
+
+Resultados observados:
+- Ping para 192.168.10.1: 4 recebidos, 0% de perda.
+- Ping para 8.8.8.8: 4 recebidos, 0% de perda.
+- Ping para google.com: 4 recebidos, 0% de perda.
+
+Interpretação:
+Com o NAT próprio da VM3 desativado, a VM3 acessou a Internet
+utilizando a VM1 como gateway. A rota foi temporária e pode desaparecer
+após reinicialização. Esta comprovação foi feita por comandos no
+terminal, não pelas imagens de Wireshark fornecidas nesta revisão.
+
+8. RESUMO DAS EVIDÊNCIAS
+-------------------------
+DHCP: Discover, Offer, Request e ACK observados; houve tentativas
+      Discover/Offer repetidas na captura.
+DNS: consulta A e resposta para www.cardeal.local; consulta AAAA sem
+     endereço IPv6 retornado.
+HTTP: GET / e resposta HTTP 200 OK. Handshake TCP precisa ser confirmado
+      na captura com filtro tcp.port == 80.
+SMTP: diálogo bem-sucedido e aceitação da mensagem pelo Postfix.
+IMAP: autenticação e três mensagens reconhecidas na INBOX, comprovadas
+      por comandos no terminal.
+SMB: compartilhamento Arquivos e arquivo teste.txt acessados por smbclient.
+Gateway: acesso externo da VM3 através da VM1 comprovado por ping e rota.
